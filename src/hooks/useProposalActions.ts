@@ -1,5 +1,5 @@
 import { PublicKey } from '@solana/web3.js';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useSigner } from './useSigner';
 import * as multisig from '@sqds/multisig';
 import { useMultisig } from './useServices';
 import type { TransactionKind } from './useServices';
@@ -26,7 +26,7 @@ export function useApproveButtonState({
   isAccountClosed: boolean;
   approvedMembers: PublicKey[];
 }) {
-  const { publicKey } = useWallet();
+  const { publicKey } = useSigner();
   const { data: multisigConfig } = useMultisig();
   const connectedMember = publicKey ? isMember(publicKey, multisigConfig?.members ?? []) : undefined;
   const hasVotePermission = connectedMember
@@ -56,7 +56,7 @@ export function useRejectButtonState({
   isAccountClosed: boolean;
   rejectedMembers: PublicKey[];
 }) {
-  const { publicKey } = useWallet();
+  const { publicKey } = useSigner();
   const { data: multisigConfig } = useMultisig();
   const connectedMember = publicKey ? isMember(publicKey, multisigConfig?.members ?? []) : undefined;
   const hasVotePermission = connectedMember
@@ -88,7 +88,7 @@ export function useExecuteButtonState({
   approvedAt: number | undefined;
   kind: TransactionKind;
 }) {
-  const { publicKey } = useWallet();
+  const { publicKey } = useSigner();
   const { data: multisigConfig } = useMultisig();
   const connectedMember = publicKey ? isMember(publicKey, multisigConfig?.members ?? []) : undefined;
   const hasExecutePermission = connectedMember
@@ -126,7 +126,7 @@ export function useCancelButtonState({
   isAccountClosed: boolean;
   cancelledMembers: PublicKey[];
 }) {
-  const { publicKey } = useWallet();
+  const { publicKey } = useSigner();
   const { data: multisigConfig } = useMultisig();
   const connectedMember = publicKey ? isMember(publicKey, multisigConfig?.members ?? []) : undefined;
   const hasVotePermission = connectedMember

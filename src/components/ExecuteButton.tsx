@@ -23,6 +23,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { waitForConfirmation } from '../lib/transactionConfirmation';
 import { useExecuteButtonState } from '@/hooks/useProposalActions';
 import type { TransactionKind } from '@/hooks/useServices';
+import { useSigner } from '@/hooks/useSigner';
+import { useUnsignedTransaction } from './UnsignedTransactionDialog';
+
 
 function formatTimeRemaining(seconds: number): string {
   const days = Math.floor(seconds / 86400);
@@ -64,6 +67,8 @@ const ExecuteButton = ({
   const closeDialog = () => setIsOpen(false);
   const [isPending, setIsPending] = useState(false);
   const wallet = useWallet();
+  const signer = useSigner();
+  const { showUnsigned } = useUnsignedTransaction();
   const walletModal = useWalletModal();
   const [priorityFeeLamports, setPriorityFeeLamports] = useState<number>(5000);
   const [computeUnitBudget, setComputeUnitBudget] = useState<number>(200_000);
@@ -75,19 +80,9 @@ const ExecuteButton = ({
   const signaturesRef = useRef<string[]>([]);
   const queryClient = useQueryClient();
 
-  const executeTransaction = async () => {
-    if (!wallet.publicKey) {
-      walletModal.setVisible(true);
-      throw 'Wallet not connected';
-    }
-    const member = wallet.publicKey;
-    if (!wallet.signAllTransactions) throw 'Connected wallet does not support signing multiple transactions';
-    signaturesRef.current = [];
+  /** Builds the unsigned execute transaction(s) for `member`; batches produce one per remaining inner transaction. */
+  const buildTransactions = async (member: PublicKey): Promise<VersionedTransaction[]> => {
     let bigIntTransactionIndex = BigInt(transactionIndex);
-
-    // Stage 1: waiting for wallet
-    toast.loading('Waiting for wallet approval...', { id: 'execute', duration: Infinity });
-
     const resolvedProgramId = programId ? new PublicKey(programId) : multisig.PROGRAM_ID;
 
     const [transactionPda] = multisig.getTransactionPda({
@@ -178,6 +173,32 @@ const ExecuteButton = ({
         ))
       );
     }
+
+    return transactions;
+  };
+
+  const executeTransaction = async () => {
+    const member = signer.publicKey;
+    if (!member) {
+      walletModal.setVisible(true);
+      throw 'Wallet not connected';
+    }
+    if (signer.isManual) {
+      await showUnsigned({
+        title: 'Execute transaction',
+        build: async () =>
+          (await buildTransactions(member)).map((tx) => Buffer.from(tx.serialize()).toString('base64')),
+      });
+      closeDialog();
+      return;
+    }
+    if (!wallet.signAllTransactions) throw 'Connected wallet does not support signing multiple transactions';
+    signaturesRef.current = [];
+
+    // Stage 1: waiting for wallet
+    toast.loading('Waiting for wallet approval...', { id: 'execute', duration: Infinity });
+
+    const transactions = await buildTransactions(member);
 
     const signedTransactions = await wallet.signAllTransactions(transactions);
 

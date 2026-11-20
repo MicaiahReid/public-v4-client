@@ -2,6 +2,7 @@ import SetProgramIdInput from '@/components/SetProgramIdInput';
 import SetRpcUrlInput from '@/components/SetRpcUrlnput';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import SetExplorerInput from '../components/SetExplorerInput';
+import SetSignerInput from '@/components/SetSignerInput';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Suspense } from 'react';
 
@@ -37,6 +38,18 @@ const SettingsPage = () => {
               </CardHeader>
               <CardContent>
                 <SetExplorerInput />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Signer Pubkey</CardTitle>
+                <CardDescription>
+                  Without a connected wallet, proposal actions build an unsigned base64
+                  transaction for this key instead of sending one.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SetSignerInput />
               </CardContent>
             </Card>
           </div>

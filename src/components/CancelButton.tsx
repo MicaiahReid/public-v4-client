@@ -9,6 +9,9 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
 import { waitForConfirmation } from '../lib/transactionConfirmation';
 import { formatTransactionError } from '@/lib/utils';
+import { useSigner } from '@/hooks/useSigner';
+import { useUnsignedTransaction } from './UnsignedTransactionDialog';
+import { serializeUnsigned } from '@/lib/serializeUnsigned';
 import { useCancelButtonState } from '@/hooks/useProposalActions';
 
 type CancelButtonProps = {
@@ -29,6 +32,8 @@ const CancelButton = ({
   cancelledMembers,
 }: CancelButtonProps) => {
   const wallet = useWallet();
+  const signer = useSigner();
+  const { showUnsigned } = useUnsignedTransaction();
   const walletModal = useWalletModal();
   const { isDisabled } = useCancelButtonState({ proposalStatus, isAccountClosed, cancelledMembers });
   const { connection } = useMultisigData();
@@ -37,17 +42,25 @@ const CancelButton = ({
   const [isPending, setIsPending] = useState(false);
 
   const cancelProposal = async () => {
-    if (!wallet.publicKey) {
+    const member = signer.publicKey;
+    if (!member) {
       walletModal.setVisible(true);
       throw 'Wallet not connected';
     }
     const cancelIx = multisig.instructions.proposalCancelV2({
       multisigPda: new PublicKey(multisigPda),
       transactionIndex: BigInt(transactionIndex),
-      member: wallet.publicKey,
+      member,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
     const transaction = new Transaction().add(cancelIx);
+    if (signer.isManual) {
+      await showUnsigned({
+        title: 'Cancel proposal',
+        build: async () => [await serializeUnsigned(transaction, member, connection)],
+      });
+      return;
+    }
     toast.loading('Waiting for wallet approval...', { id: 'transaction', duration: Infinity });
 
     const signature = await wallet.sendTransaction(transaction, connection, {

@@ -10,6 +10,9 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
 import { waitForConfirmation } from '../lib/transactionConfirmation';
 import { formatTransactionError } from '@/lib/utils';
+import { useSigner } from '@/hooks/useSigner';
+import { useUnsignedTransaction } from './UnsignedTransactionDialog';
+import { serializeUnsigned } from '@/lib/serializeUnsigned';
 import { useRejectButtonState } from '@/hooks/useProposalActions';
 
 type RejectButtonProps = {
@@ -32,6 +35,8 @@ const RejectButton = ({
   isAccountClosed,
 }: RejectButtonProps) => {
   const wallet = useWallet();
+  const signer = useSigner();
+  const { showUnsigned } = useUnsignedTransaction();
   const walletModal = useWalletModal();
   const { isDisabled } = useRejectButtonState({ proposalStatus, isStale, isAccountClosed, rejectedMembers });
   const { connection } = useMultisigData();
@@ -40,7 +45,8 @@ const RejectButton = ({
   const [isPending, setIsPending] = useState(false);
 
   const rejectTransaction = async () => {
-    if (!wallet.publicKey) {
+    const member = signer.publicKey;
+    if (!member) {
       walletModal.setVisible(true);
       throw 'Wallet not connected';
     }
@@ -50,10 +56,10 @@ const RejectButton = ({
     if (proposalStatus === 'None') {
       const createProposalInstruction = multisig.instructions.proposalCreate({
         multisigPda: new PublicKey(multisigPda),
-        creator: wallet.publicKey,
+        creator: member,
         isDraft: false,
         transactionIndex: bigIntTransactionIndex,
-        rentPayer: wallet.publicKey,
+        rentPayer: member,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
       transaction.add(createProposalInstruction);
@@ -61,7 +67,7 @@ const RejectButton = ({
     if (proposalStatus == 'Draft') {
       const activateProposalInstruction = multisig.instructions.proposalActivate({
         multisigPda: new PublicKey(multisigPda),
-        member: wallet.publicKey,
+        member: member,
         transactionIndex: bigIntTransactionIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
@@ -69,12 +75,20 @@ const RejectButton = ({
     }
     const rejectProposalInstruction = multisig.instructions.proposalReject({
       multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
+      member: member,
       transactionIndex: bigIntTransactionIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
     transaction.add(rejectProposalInstruction);
+
+    if (signer.isManual) {
+      await showUnsigned({
+        title: 'Reject proposal',
+        build: async () => [await serializeUnsigned(transaction, member, connection)],
+      });
+      return;
+    }
 
     toast.loading('Waiting for wallet approval...', { id: 'transaction', duration: Infinity });
 

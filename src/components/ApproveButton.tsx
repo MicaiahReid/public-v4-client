@@ -9,6 +9,9 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
 import { waitForConfirmation } from '../lib/transactionConfirmation';
 import { formatTransactionError } from '@/lib/utils';
+import { useSigner } from '@/hooks/useSigner';
+import { useUnsignedTransaction } from './UnsignedTransactionDialog';
+import { serializeUnsigned } from '@/lib/serializeUnsigned';
 import { useApproveButtonState } from '@/hooks/useProposalActions';
 
 type ApproveButtonProps = {
@@ -31,6 +34,8 @@ const ApproveButton = ({
   isAccountClosed,
 }: ApproveButtonProps) => {
   const wallet = useWallet();
+  const signer = useSigner();
+  const { showUnsigned } = useUnsignedTransaction();
   const walletModal = useWalletModal();
   const { isDisabled } = useApproveButtonState({ proposalStatus, isStale, isAccountClosed, approvedMembers });
   const { connection } = useMultisigData();
@@ -39,7 +44,8 @@ const ApproveButton = ({
   const [isPending, setIsPending] = useState(false);
 
   const approveProposal = async () => {
-    if (!wallet.publicKey) {
+    const member = signer.publicKey;
+    if (!member) {
       walletModal.setVisible(true);
       throw 'Wallet not connected';
     }
@@ -48,10 +54,10 @@ const ApproveButton = ({
     if (proposalStatus === 'None') {
       const createProposalInstruction = multisig.instructions.proposalCreate({
         multisigPda: new PublicKey(multisigPda),
-        creator: wallet.publicKey,
+        creator: member,
         isDraft: false,
         transactionIndex: bigIntTransactionIndex,
-        rentPayer: wallet.publicKey,
+        rentPayer: member,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
       transaction.add(createProposalInstruction);
@@ -59,7 +65,7 @@ const ApproveButton = ({
     if (proposalStatus == 'Draft') {
       const activateProposalInstruction = multisig.instructions.proposalActivate({
         multisigPda: new PublicKey(multisigPda),
-        member: wallet.publicKey,
+        member: member,
         transactionIndex: bigIntTransactionIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
@@ -67,11 +73,19 @@ const ApproveButton = ({
     }
     const approveProposalInstruction = multisig.instructions.proposalApprove({
       multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
+      member: member,
       transactionIndex: bigIntTransactionIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
     transaction.add(approveProposalInstruction);
+    if (signer.isManual) {
+      await showUnsigned({
+        title: 'Approve proposal',
+        build: async () => [await serializeUnsigned(transaction, member, connection)],
+      });
+      return;
+    }
+
     toast.loading('Waiting for wallet approval...', { id: 'transaction', duration: Infinity });
 
     const signature = await wallet.sendTransaction(transaction, connection, {
